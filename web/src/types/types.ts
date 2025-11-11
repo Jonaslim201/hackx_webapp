@@ -12,6 +12,8 @@ export interface Evidence {
     label?: string;
     category?: string;
     notes?: string;
+    images?: string[];  // NEW: Array of base64 image strings
+    originalPosition?: Point;  // NEW: Store original position for reset
 }
 
 export interface MapData {

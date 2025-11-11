@@ -7,7 +7,7 @@ def process_map(input_path, output_dir=None, debug=False):
     # CONSTANTS
     median_kernel = 3
     morph_kernel = 5
-    MAX_GAP_SIZE = 20
+    MAX_GAP_SIZE = 30
     RESOLUTION_CM_PER_PIXEL = 5
     
     # 
@@ -95,9 +95,9 @@ def canny(img, debug=False):
     # Hough Line parameters - more lenient to detect more lines
     rho = 1
     theta = np.pi / 180
-    threshold = 50  # Lowered from 100
-    min_line_length = 30  # Increased from 10
-    max_line_gap = 20  # Increased from 10
+    threshold = 35  # Lowered from 100
+    min_line_length = 50  # Increased from 10
+    max_line_gap = 50  # Increased from 10
 
     # Detect lines
     lines = cv2.HoughLinesP(edges, rho, theta, threshold, 

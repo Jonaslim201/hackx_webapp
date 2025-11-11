@@ -15,14 +15,34 @@ export default function MapEditor({
     onEvidenceUpdate,
 }: MapEditorProps) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [scale, setScale] = useState(2);
     const [imageLoaded, setImageLoaded] = useState<HTMLImageElement | null>(null);
+    const [initialized, setInitialized] = useState(false); // NEW: Track initialization
 
     const scaledWidth = mapData.width * scale;
     const scaledHeight = mapData.height * scale;
     const selectedEvidence = evidence.find((e) => e.id === selectedId);
+
+    // NEW: Initialize original positions for existing markers
+    useEffect(() => {
+        if (!initialized && evidence.length > 0) {
+            const needsInitialization = evidence.some(e => !e.originalPosition);
+            
+            if (needsInitialization) {
+                const updated = evidence.map(e => ({
+                    ...e,
+                    originalPosition: e.originalPosition || { ...e.pixel }, // Set original position if not exists
+                    images: e.images || [], // Ensure images array exists
+                }));
+                onEvidenceUpdate(updated);
+            }
+            
+            setInitialized(true);
+        }
+    }, [evidence, initialized, onEvidenceUpdate]);
 
     // Load image
     useEffect(() => {
@@ -73,7 +93,7 @@ export default function MapEditor({
 
     // Handle click and drag
     const getMarkerAt = (x: number, y: number) => {
-        const r = 8 * scale; // effective radius
+        const r = 8 * scale;
         return evidence.find(
             (e) =>
                 Math.hypot(x - e.pixel.x * scale, y - e.pixel.y * scale) <=
@@ -114,22 +134,26 @@ export default function MapEditor({
         setDraggingId(null);
     };
 
-    // Add / Delete / Update
+    // Add marker
     const handleAddMarker = () => {
+        const centerPixel = { x: mapData.width / 2, y: mapData.height / 2 };
         const newEvidence: Evidence = {
             id: `marker-${Date.now()}`,
             x: "0",
             y: "0",
             time: new Date().toLocaleTimeString(),
-            pixel: { x: mapData.width / 2, y: mapData.height / 2 },
+            pixel: centerPixel,
+            originalPosition: centerPixel,
             label: "New Marker",
             category: "uncategorized",
             notes: "",
+            images: [],
         };
         onEvidenceUpdate([...evidence, newEvidence]);
         setSelectedId(newEvidence.id);
     };
 
+    // Delete marker
     const handleDelete = () => {
         if (selectedId) {
             onEvidenceUpdate(evidence.filter((e) => e.id !== selectedId));
@@ -137,6 +161,18 @@ export default function MapEditor({
         }
     };
 
+    // Reset position to original
+    const handleResetPosition = () => {
+        if (!selectedId || !selectedEvidence?.originalPosition) return;
+        const updated = evidence.map((e) =>
+            e.id === selectedId
+                ? { ...e, pixel: { ...e.originalPosition! } }
+                : e
+        );
+        onEvidenceUpdate(updated);
+    };
+
+    // Update field
     const updateField = (field: keyof Evidence, value: string) => {
         if (!selectedId) return;
         const updated = evidence.map((e) =>
@@ -145,6 +181,52 @@ export default function MapEditor({
         onEvidenceUpdate(updated);
     };
 
+    // Handle image upload
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || !selectedId) return;
+
+        const fileArray = Array.from(files);
+        const readers = fileArray.map((file) => {
+            return new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    resolve(event.target?.result as string);
+                };
+                reader.readAsDataURL(file);
+            });
+        });
+
+        Promise.all(readers).then((base64Images) => {
+            const updated = evidence.map((e) =>
+                e.id === selectedId
+                    ? { ...e, images: [...(e.images || []), ...base64Images] }
+                    : e
+            );
+            onEvidenceUpdate(updated);
+        });
+
+        // Reset file input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+    };
+
+    // Delete image
+    const handleDeleteImage = (imageIndex: number) => {
+        if (!selectedId || !selectedEvidence) return;
+        const updated = evidence.map((e) =>
+            e.id === selectedId
+                ? {
+                      ...e,
+                      images: e.images?.filter((_, i) => i !== imageIndex) || [],
+                  }
+                : e
+        );
+        onEvidenceUpdate(updated);
+    };
+
+    // Export map
     const handleExport = () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -208,11 +290,13 @@ export default function MapEditor({
             {/* Editor Panel */}
             <div
                 style={{
-                    width: "300px",
+                    width: "350px",
                     padding: "20px",
                     border: "1px solid #ccc",
                     backgroundColor: "#f9f9f9",
                     borderRadius: "8px",
+                    maxHeight: "80vh",
+                    overflowY: "auto",
                 }}
             >
                 <h3>Marker Editor</h3>
@@ -226,7 +310,7 @@ export default function MapEditor({
                             <input
                                 value={selectedEvidence.label}
                                 onChange={(e) => updateField("label", e.target.value)}
-                                style={{ width: "100%" }}
+                                style={{ width: "100%", padding: "5px" }}
                             />
                         </div>
                         <div style={{ marginBottom: "10px" }}>
@@ -234,7 +318,7 @@ export default function MapEditor({
                             <input
                                 value={selectedEvidence.category}
                                 onChange={(e) => updateField("category", e.target.value)}
-                                style={{ width: "100%" }}
+                                style={{ width: "100%", padding: "5px" }}
                             />
                         </div>
                         <div style={{ marginBottom: "10px" }}>
@@ -243,13 +327,110 @@ export default function MapEditor({
                                 value={selectedEvidence.notes}
                                 onChange={(e) => updateField("notes", e.target.value)}
                                 rows={4}
-                                style={{ width: "100%" }}
+                                style={{ width: "100%", padding: "5px" }}
                             />
                         </div>
-                        <p style={{ color: "#666" }}>
+
+                        {/* Images Section */}
+                        <div style={{ marginBottom: "15px" }}>
+                            <label style={{ fontWeight: "bold", display: "block", marginBottom: "5px" }}>
+                                Images ({selectedEvidence.images?.length || 0})
+                            </label>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleImageUpload}
+                                style={{ display: "none" }}
+                            />
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                style={{
+                                    width: "100%",
+                                    padding: "8px",
+                                    backgroundColor: "#4caf50",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "4px",
+                                    cursor: "pointer",
+                                    marginBottom: "10px",
+                                }}
+                            >
+                                Upload Images
+                            </button>
+
+                            {/* Display uploaded images */}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                                {selectedEvidence.images?.map((img, idx) => (
+                                    <div
+                                        key={idx}
+                                        style={{
+                                            position: "relative",
+                                            width: "80px",
+                                            height: "80px",
+                                        }}
+                                    >
+                                        <img
+                                            src={img}
+                                            alt={`Evidence ${idx + 1}`}
+                                            style={{
+                                                width: "100%",
+                                                height: "100%",
+                                                objectFit: "cover",
+                                                borderRadius: "4px",
+                                                border: "1px solid #ddd",
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => handleDeleteImage(idx)}
+                                            style={{
+                                                position: "absolute",
+                                                top: "-5px",
+                                                right: "-5px",
+                                                width: "20px",
+                                                height: "20px",
+                                                borderRadius: "50%",
+                                                backgroundColor: "#f44336",
+                                                color: "white",
+                                                border: "none",
+                                                cursor: "pointer",
+                                                fontSize: "12px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                            }}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <p style={{ color: "#666", fontSize: "12px" }}>
                             x: {selectedEvidence.pixel.x.toFixed(1)}, y:{" "}
                             {selectedEvidence.pixel.y.toFixed(1)}
                         </p>
+
+                        {/* Reset Position Button */}
+                        <button
+                            onClick={handleResetPosition}
+                            disabled={!selectedEvidence.originalPosition}
+                            style={{
+                                width: "100%",
+                                backgroundColor: selectedEvidence.originalPosition ? "#ff9800" : "#ccc",
+                                color: "white",
+                                padding: "8px",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: selectedEvidence.originalPosition ? "pointer" : "not-allowed",
+                                marginBottom: "10px",
+                            }}
+                        >
+                            Reset Position
+                        </button>
+
                         <button
                             onClick={handleDelete}
                             style={{
