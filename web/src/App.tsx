@@ -8,11 +8,14 @@ function App() {
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [baseImage, setBaseImage] = useState<string>('');
+  const [resolution, setResolution] = useState<number>(0.05);
 
   const handleUploadComplete = (data: any) => {
     setMapData(data.map);
     setEvidence(data.evidence);
     setBaseImage(data.baseImage);
+    // Assuming backend sends resolution in response
+    if (data.resolution) setResolution(data.resolution);
   };
 
   const handleExport = async () => {
@@ -42,6 +45,7 @@ function App() {
             mapData={mapData}
             evidence={evidence}
             onEvidenceUpdate={setEvidence}
+            resolution={resolution}
           />
           <button onClick={handleExport}>Export Final Map</button>
         </>
