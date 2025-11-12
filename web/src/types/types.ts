@@ -8,12 +8,13 @@ export interface Evidence {
     x: string;
     y: string;
     time: string;
-    pixel: Point;
-    label?: string;
-    category?: string;
-    notes?: string;
-    images?: string[];  // NEW: Array of base64 image strings
-    originalPosition?: Point;  // NEW: Store original position for reset
+    pixel: { x: number; y: number };
+    originalPosition?: { x: number; y: number };
+    label: string;
+    category: string;
+    notes: string;
+    images?: string[];
+    locked?: boolean; // Add this line
 }
 
 export interface MapData {
@@ -21,3 +22,4 @@ export interface MapData {
     height: number;
     contours: Point[][];
 }
+
