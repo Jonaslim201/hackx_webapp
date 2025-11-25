@@ -56,6 +56,20 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     font-synthesis: none;
+    overflow-x: hidden;
+  }
+
+  /* Improve touch targets for mobile */
+  button, a, input, textarea, select {
+    touch-action: manipulation;
+  }
+
+  /* Better text rendering on mobile */
+  @media (max-width: 640px) {
+    body {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
   }
 }
 

@@ -98,7 +98,6 @@ export default function CaseViewerClient({ caseId }: Props) {
   }, [caseId]);
 
   const status: CaseStatus = details?.status ?? 'open';
-  const totalMarkers = evidence.length;
 
   const formattedDates = useMemo(() => {
     const created = details?.createdAt ? new Date(details.createdAt).toLocaleString() : '—';
@@ -145,149 +144,120 @@ export default function CaseViewerClient({ caseId }: Props) {
 
   return (
     <div className="min-h-screen bg-transparent text-foreground">
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-1 items-start gap-4">
+      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6 py-4 sm:py-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-1 items-start gap-3 sm:gap-4 min-w-0">
             <Link
               href="/cases"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 text-muted-foreground transition hover:border-primary/60 hover:text-primary"
+              className="inline-flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl border border-border/60 text-muted-foreground transition hover:border-primary/60 hover:text-primary flex-shrink-0"
               aria-label="Back to cases"
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Case #{caseId}</p>
-              <h1 className="text-3xl font-semibold text-foreground">{details?.title ?? summary?.title ?? caseId}</h1>
-              <p className="text-sm text-muted-foreground">
-                {summary?.description ?? 'Map and evidence assets stored in S3'}
-              </p>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground truncate">{details?.title ?? summary?.title ?? caseId}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground/90">
+                <span>Created {formattedDates.created}</span>
+                <span className="hidden sm:inline text-muted-foreground/60">•</span>
+                <span>Updated {formattedDates.updated}</span>
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <StatusBadge status={status} />
             <button
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-400 to-blue-500 px-6 py-2 text-sm font-semibold text-slate-950 shadow-[0_10px_30px_rgba(14,165,233,0.35)] transition hover:shadow-[0_15px_35px_rgba(14,165,233,0.45)] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-400 to-blue-500 px-4 sm:px-6 py-2 text-xs sm:text-sm font-semibold text-slate-950 shadow-[0_10px_30px_rgba(14,165,233,0.35)] transition hover:shadow-[0_15px_35px_rgba(14,165,233,0.45)] disabled:opacity-60 flex-shrink-0"
             >
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving…' : 'Save All Changes'}
+              <Save className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">{saving ? 'Saving…' : 'Save All Changes'}</span>
+              <span className="sm:hidden">{saving ? 'Saving…' : 'Save'}</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6 xl:flex-row">
-        <section className="flex-1">
-          <div className="h-full rounded-[32px] border border-border/40 bg-card/40 p-4 shadow-[0_25px_80px_rgba(0,0,0,0.35)] sm:p-6">
-            <MapEditor baseImage={baseImage} mapData={map} evidence={evidence} onEvidenceUpdate={setEvidence} />
-          </div>
+      <main className="mx-auto w-full max-w-6xl space-y-4 sm:space-y-6 px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+        <section className="rounded-2xl sm:rounded-[32px] border border-border/40 bg-card/40 p-3 sm:p-4 lg:p-6 shadow-[0_25px_80px_rgba(0,0,0,0.35)]">
+          <MapEditor baseImage={baseImage} mapData={map} evidence={evidence} onEvidenceUpdate={setEvidence} />
         </section>
 
-        <aside className="w-full xl:w-[360px]">
-          <div className="space-y-6">
-            <div className="rounded-3xl border border-border/40 bg-card/50 p-5">
-              <h2 className="text-lg font-semibold">Case Details</h2>
-              <div className="mt-4 space-y-4 text-sm">
-                <label className="space-y-1">
-                  <span className="text-muted-foreground">Case Title</span>
-                  <input
-                    type="text"
-                    value={details?.title ?? ''}
-                    onChange={(e) => updateDetails({ title: e.target.value })}
-                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-muted-foreground">Description</span>
-                  <textarea
-                    value={details?.description ?? ''}
-                    onChange={(e) => updateDetails({ description: e.target.value })}
-                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-                    rows={3}
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-muted-foreground">Created By</span>
-                  <input
-                    type="text"
-                    value={details?.createdBy ?? ''}
-                    onChange={(e) => updateDetails({ createdBy: e.target.value })}
-                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-                  />
-                </label>
-              </div>
+        <section className="rounded-2xl sm:rounded-[32px] border border-border/40 bg-card/50 p-4 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base sm:text-lg font-semibold">Case Details & Settings</h2>
+            <span className="text-xs sm:text-sm text-muted-foreground">{evidence.length} markers tracked</span>
+          </div>
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="space-y-4">
+              <label className="block space-y-1">
+                <span className="text-muted-foreground text-xs sm:text-sm">Case Title</span>
+                <input
+                  type="text"
+                  value={details?.title ?? ''}
+                  onChange={(e) => updateDetails({ title: e.target.value })}
+                  className="w-full rounded-xl sm:rounded-2xl border border-border/40 bg-secondary/20 px-3 sm:px-4 py-2 text-sm sm:text-base text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-muted-foreground text-xs sm:text-sm">Created By</span>
+                <input
+                  type="text"
+                  value={details?.createdBy ?? ''}
+                  onChange={(e) => updateDetails({ createdBy: e.target.value })}
+                  className="w-full rounded-xl sm:rounded-2xl border border-border/40 bg-secondary/20 px-3 sm:px-4 py-2 text-sm sm:text-base text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-muted-foreground text-xs sm:text-sm">Description</span>
+                <textarea
+                  value={details?.description ?? ''}
+                  onChange={(e) => updateDetails({ description: e.target.value })}
+                  className="w-full rounded-xl sm:rounded-2xl border border-border/40 bg-secondary/20 px-3 sm:px-4 py-2 text-sm sm:text-base text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+                  rows={4}
+                />
+              </label>
             </div>
-
-            <div className="rounded-3xl border border-border/40 bg-card/50 p-5">
-              <h2 className="text-lg font-semibold">Evidence Summary</h2>
-              <div className="mt-4 space-y-3 text-sm">
-                <div className="flex items-center justify-between rounded-2xl border border-border/30 bg-secondary/15 px-4 py-3">
-                  <span className="text-muted-foreground">Total Markers</span>
-                  <span className="text-lg font-semibold text-primary">{totalMarkers}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl border border-border/30 bg-secondary/15 px-4 py-3">
-                  <span className="text-muted-foreground">Current Status</span>
-                  <StatusBadge status={status} />
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-border/40 bg-card/50 p-5 text-sm">
-              <h2 className="text-lg font-semibold">Case Settings</h2>
-              <div className="mt-4 space-y-5">
-                <div className="space-y-2">
-                  <span className="text-muted-foreground">Status</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {STATUS_OPTIONS.map((option) => {
-                      const isActive = status === option.value;
-                      return (
-                        <button
-                          type="button"
-                          key={option.value}
-                          onClick={() => updateDetails({ status: option.value })}
-                          className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
-                            isActive
-                              ? option.active
-                              : `border-border/40 bg-transparent ${option.idle}`
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <label className="space-y-2">
-                  <span className="text-muted-foreground">Tags (comma separated)</span>
-                  <input
-                    type="text"
-                    value={(details?.tags ?? []).join(', ')}
-                    onChange={(e) =>
-                      updateDetails({
-                        tags: e.target.value.split(',').map((tag) => tag.trim()).filter(Boolean)
-                      })
-                    }
-                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-                  />
-                </label>
-
-                <div className="grid gap-3 rounded-2xl border border-border/30 bg-secondary/10 px-4 py-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Created</p>
-                    <p className="text-sm">{formattedDates.created}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Last Updated</p>
-                    <p className="text-sm">{formattedDates.updated}</p>
-                  </div>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <span className="text-muted-foreground text-xs sm:text-sm">Status</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {STATUS_OPTIONS.map((option) => {
+                    const isActive = status === option.value;
+                    return (
+                      <button
+                        type="button"
+                        key={option.value}
+                        onClick={() => updateDetails({ status: option.value })}
+                        className={`rounded-xl sm:rounded-2xl border px-2 sm:px-3 py-2 text-xs sm:text-sm font-semibold transition ${
+                          isActive ? option.active : `border-border/40 bg-transparent ${option.idle}`
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+              <label className="block space-y-2">
+                <span className="text-muted-foreground text-xs sm:text-sm">Tags (comma separated)</span>
+                <input
+                  type="text"
+                  value={(details?.tags ?? []).join(', ')}
+                  onChange={(e) =>
+                    updateDetails({
+                      tags: e.target.value.split(',').map((tag) => tag.trim()).filter(Boolean)
+                    })
+                  }
+                  className="w-full rounded-xl sm:rounded-2xl border border-border/40 bg-secondary/20 px-3 sm:px-4 py-2 text-sm sm:text-base text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+
             </div>
           </div>
-        </aside>
+        </section>
       </main>
     </div>
   );
