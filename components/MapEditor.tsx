@@ -1,5 +1,6 @@
 "use client";
-import { useRef, useEffect, useState } from "react";
+
+import { useEffect, useRef, useState } from "react";
 import type { Evidence, MapData } from "../types/types";
 
 interface MapEditorProps {
@@ -17,16 +18,17 @@ export default function MapEditor({
     onEvidenceUpdate,
     resolution = 0.05,
 }: MapEditorProps) {
-        const getNextMarkerId = () => {
-            let maxId = 0;
-            for (const ev of evidence) {
-                const numeric = Number(ev.id);
-                if (!Number.isNaN(numeric)) {
-                    maxId = Math.max(maxId, numeric);
-                }
+    // Keep marker IDs incremental so they round-trip cleanly with CSV rows
+    const getNextMarkerId = () => {
+        let maxId = 0;
+        for (const ev of evidence) {
+            const numeric = Number(ev.id);
+            if (!Number.isNaN(numeric)) {
+                maxId = Math.max(maxId, numeric);
             }
-            return String(maxId + 1);
-        };
+        }
+        return String(maxId + 1);
+    };
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -44,14 +46,12 @@ export default function MapEditor({
     const scaledHeight = mapData.height * scale;
     const selectedEvidence = evidence.find((e) => e.id === selectedId);
 
-    // Load image
     useEffect(() => {
         const img = new Image();
         img.src = baseImage;
         img.onload = () => setImageLoaded(img);
     }, [baseImage]);
 
-    // Draw everything
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas || !imageLoaded) return;
@@ -62,7 +62,6 @@ export default function MapEditor({
         ctx.clearRect(0, 0, scaledWidth, scaledHeight);
         ctx.drawImage(imageLoaded, 0, 0, scaledWidth, scaledHeight);
 
-        // Draw contours
         ctx.strokeStyle = "rgba(0, 100, 255, 0.5)";
         ctx.lineWidth = 1;
         for (const contour of mapData.contours) {
@@ -77,25 +76,21 @@ export default function MapEditor({
             ctx.stroke();
         }
 
-        // Always draw markers (visible in both modes)
-        for (const e of evidence) {
-            const x = e.pixel.x * scale;
-            const y = e.pixel.y * scale;
+        for (const ev of evidence) {
+            const x = ev.pixel.x * scale;
+            const y = ev.pixel.y * scale;
             ctx.beginPath();
             ctx.arc(x, y, 8, 0, 2 * Math.PI);
-            ctx.fillStyle = selectedId === e.id ? "#ffeb3b" : "#f44336";
+            ctx.fillStyle = selectedId === ev.id ? "#ffeb3b" : "#f44336";
             ctx.strokeStyle = "#fff";
             ctx.lineWidth = 2;
             ctx.fill();
             ctx.stroke();
         }
 
-        // Draw ruler line (overlays on top of markers)
         if (rulerStart) {
             const startX = rulerStart.x * scale;
             const startY = rulerStart.y * scale;
-
-            // Draw start point
             ctx.beginPath();
             ctx.arc(startX, startY, 6, 0, 2 * Math.PI);
             ctx.fillStyle = "#4CAF50";
@@ -107,8 +102,6 @@ export default function MapEditor({
             if (rulerEnd) {
                 const endX = rulerEnd.x * scale;
                 const endY = rulerEnd.y * scale;
-
-                // Draw line
                 ctx.beginPath();
                 ctx.moveTo(startX, startY);
                 ctx.lineTo(endX, endY);
@@ -118,7 +111,6 @@ export default function MapEditor({
                 ctx.stroke();
                 ctx.setLineDash([]);
 
-                // Draw end point
                 ctx.beginPath();
                 ctx.arc(endX, endY, 6, 0, 2 * Math.PI);
                 ctx.fillStyle = "#4CAF50";
@@ -127,7 +119,6 @@ export default function MapEditor({
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
-                // Draw distance label
                 const midX = (startX + endX) / 2;
                 const midY = (startY + endY) / 2;
                 ctx.fillStyle = "#000";
@@ -141,13 +132,9 @@ export default function MapEditor({
         }
     }, [evidence, imageLoaded, selectedId, scale, mapData, rulerMode, rulerStart, rulerEnd, distance]);
 
-    // Handle click and drag
     const getMarkerAt = (x: number, y: number) => {
         const r = 8 * scale;
-        return evidence.find(
-            (e) =>
-                Math.hypot(x - e.pixel.x * scale, y - e.pixel.y * scale) <= r
-        );
+        return evidence.find((ev) => Math.hypot(x - ev.pixel.x * scale, y - ev.pixel.y * scale) <= r);
     };
 
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -157,26 +144,21 @@ export default function MapEditor({
         const y = (e.clientY - rect.top) / scale;
 
         if (rulerMode) {
-            // Ruler mode: set start or end point
             if (!rulerStart) {
                 setRulerStart({ x, y });
                 setRulerEnd(null);
                 setDistance(null);
             } else if (!rulerEnd) {
                 setRulerEnd({ x, y });
-                // Calculate distance in meters
                 const dx = (x - rulerStart.x) * resolution;
                 const dy = (y - rulerStart.y) * resolution;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                setDistance(dist);
+                setDistance(Math.sqrt(dx * dx + dy * dy));
             } else {
-                // Reset for new measurement
                 setRulerStart({ x, y });
                 setRulerEnd(null);
                 setDistance(null);
             }
         } else {
-            // Marker mode
             const hit = getMarkerAt(e.clientX - rect.left, e.clientY - rect.top);
             if (hit) {
                 setSelectedId(hit.id);
@@ -194,9 +176,7 @@ export default function MapEditor({
         const y = e.clientY - rect.top;
 
         const updated = evidence.map((ev) =>
-            ev.id === draggingId
-                ? { ...ev, pixel: { x: x / scale, y: y / scale } }
-                : ev
+            ev.id === draggingId ? { ...ev, pixel: { x: x / scale, y: y / scale } } : ev
         );
         onEvidenceUpdate(updated);
     };
@@ -213,7 +193,6 @@ export default function MapEditor({
         setSelectedId(null);
     };
 
-    // Add / Delete / Update
     const handleAddMarker = () => {
         const newEvidence: Evidence = {
             id: getNextMarkerId(),
@@ -231,16 +210,14 @@ export default function MapEditor({
 
     const handleDelete = () => {
         if (selectedId) {
-            onEvidenceUpdate(evidence.filter((e) => e.id !== selectedId));
+            onEvidenceUpdate(evidence.filter((ev) => ev.id !== selectedId));
             setSelectedId(null);
         }
     };
 
     const updateField = (field: keyof Evidence, value: string) => {
         if (!selectedId) return;
-        const updated = evidence.map((e) =>
-            e.id === selectedId ? { ...e, [field]: value } : e
-        );
+        const updated = evidence.map((ev) => (ev.id === selectedId ? { ...ev, [field]: value } : ev));
         onEvidenceUpdate(updated);
     };
 
@@ -255,147 +232,129 @@ export default function MapEditor({
     };
 
     return (
-        <div style={{ display: "flex", gap: "20px", padding: "20px" }}>
-            {/* Canvas */}
-            <div style={{ flex: 1 }}>
-                <div style={{ marginBottom: "10px" }}>
-                    <label>Zoom: </label>
-                    <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        step="0.5"
-                        value={scale}
-                        onChange={(e) => setScale(Number(e.target.value))}
-                    />
-                    <span>{scale}x</span>
+        <div className="flex flex-col gap-6 p-4 xl:flex-row xl:p-0">
+            <div className="flex-1 space-y-4">
+                <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/30 bg-secondary/20 px-4 py-3 text-sm">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">Zoom</span>
+                        <input
+                            type="range"
+                            min="1"
+                            max="4"
+                            step="0.5"
+                            value={scale}
+                            onChange={(e) => setScale(Number(e.target.value))}
+                            className="h-2 w-32 accent-primary"
+                        />
+                        <span className="font-semibold text-primary">{scale}x</span>
+                    </div>
                     <button
                         onClick={toggleRulerMode}
-                        style={{
-                            marginLeft: "20px",
-                            backgroundColor: rulerMode ? "#4CAF50" : "#666",
-                            color: "white",
-                            padding: "6px 10px",
-                            borderRadius: "4px",
-                            border: "none",
-                            cursor: "pointer",
-                        }}
+                        type="button"
+                        className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                            rulerMode
+                                ? "bg-emerald-500/90 text-emerald-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
+                                : "border border-border/40 bg-secondary/40 text-foreground"
+                        }`}
                     >
-                        📏 Ruler {rulerMode ? "(ON)" : ""}
+                        📏 Ruler {rulerMode ? "On" : ""}
                     </button>
-                    <button onClick={handleAddMarker} style={{ marginLeft: "10px" }} disabled={rulerMode}>
-                        Add Marker
+                    <button
+                        onClick={handleAddMarker}
+                        type="button"
+                        disabled={rulerMode}
+                        className="inline-flex items-center rounded-full bg-sky-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-[0_12px_30px_rgba(14,165,233,0.35)] transition disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        + Add Marker
                     </button>
                     <button
                         onClick={handleExport}
-                        style={{
-                            marginLeft: "10px",
-                            backgroundColor: "#2196f3",
-                            color: "white",
-                            padding: "6px 10px",
-                            borderRadius: "4px",
-                            border: "none",
-                        }}
+                        type="button"
+                        className="inline-flex items-center rounded-full bg-blue-500/90 px-4 py-2 text-xs font-semibold text-slate-950 shadow-[0_12px_30px_rgba(59,130,246,0.35)]"
                     >
                         Download Map
                     </button>
-                    <span style={{ marginLeft: "20px", color: "#666" }}>
-                        Total markers: {evidence.length}
+                    <span className="ml-auto text-xs text-muted-foreground">
+                        Total markers: <span className="font-semibold text-primary">{evidence.length}</span>
                     </span>
                 </div>
+
                 {rulerMode && (
-                    <div
-                        style={{
-                            padding: "10px",
-                            backgroundColor: "#e8f5e9",
-                            border: "1px solid #4CAF50",
-                            borderRadius: "4px",
-                            marginBottom: "10px",
-                        }}
-                    >
-                        <strong>Ruler Mode:</strong> Click to set start point, click again to set end point.
+                    <div className="rounded-2xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                        <strong className="text-emerald-300">Ruler mode:</strong> Click to set start point, then end point.
                         {distance && (
-                            <span style={{ marginLeft: "10px", color: "#2e7d32" }}>
-                                Distance: <strong>{distance.toFixed(2)}m</strong>
+                            <span className="ml-3 text-emerald-200">
+                                Distance <strong>{distance.toFixed(2)}m</strong>
                             </span>
                         )}
                     </div>
                 )}
-                <canvas
-                    ref={canvasRef}
-                    width={scaledWidth}
-                    height={scaledHeight}
-                    style={{
-                        border: "2px solid #ccc",
-                        backgroundColor: "#f0f0f0",
-                        cursor: rulerMode ? "crosshair" : draggingId ? "grabbing" : "pointer",
-                    }}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                />
+
+                <div className="overflow-auto rounded-[28px] border border-border/40 bg-neutral-900/60 p-4">
+                    <canvas
+                        ref={canvasRef}
+                        width={scaledWidth}
+                        height={scaledHeight}
+                        className="mx-auto block rounded-[24px] border-2 border-slate-800 bg-slate-900/80 shadow-inner"
+                        style={{ cursor: rulerMode ? "crosshair" : draggingId ? "grabbing" : "pointer" }}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                    />
+                </div>
             </div>
 
-            {/* Editor Panel */}
-            <div
-                style={{
-                    width: "300px",
-                    padding: "20px",
-                    border: "1px solid #ccc",
-                    backgroundColor: "#000000ff",
-                    borderRadius: "8px",
-                }}
-            >
-                <h3>Marker Editor</h3>
-                {selectedEvidence ? (
-                    <>
-                        <p style={{ fontSize: "12px", color: "#777" }}>ID: {selectedEvidence.id}</p>
-                        <div style={{ marginBottom: "10px" }}>
-                            <label>Label</label>
-                            <input
-                                value={selectedEvidence.label}
-                                onChange={(e) => updateField("label", e.target.value)}
-                                style={{ width: "100%" }}
-                            />
+            <div className="w-full rounded-3xl border border-border/40 bg-[#05090f] p-5 text-sm shadow-[0_20px_60px_rgba(0,0,0,0.55)] xl:w-[320px]">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-foreground">Marker Editor</h3>
+                    <span className="text-xs text-muted-foreground">Click a marker to edit</span>
+                </div>
+                <div className="mt-4 space-y-4">
+                    {selectedEvidence ? (
+                        <>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">ID: {selectedEvidence.id}</p>
+                            <label className="space-y-1 text-muted-foreground">
+                                <span>Label</span>
+                                <input
+                                    value={selectedEvidence.label}
+                                    onChange={(e) => updateField("label", e.target.value)}
+                                    className="w-full rounded-xl border border-border/40 bg-secondary/20 px-3 py-2 text-foreground focus:border-primary focus:outline-none"
+                                />
+                            </label>
+                            <label className="space-y-1 text-muted-foreground">
+                                <span>Category</span>
+                                <input
+                                    value={selectedEvidence.category}
+                                    onChange={(e) => updateField("category", e.target.value)}
+                                    className="w-full rounded-xl border border-border/40 bg-secondary/20 px-3 py-2 text-foreground focus:border-primary focus:outline-none"
+                                />
+                            </label>
+                            <label className="space-y-1 text-muted-foreground">
+                                <span>Notes</span>
+                                <textarea
+                                    value={selectedEvidence.notes}
+                                    onChange={(e) => updateField("notes", e.target.value)}
+                                    rows={4}
+                                    className="w-full rounded-xl border border-border/40 bg-secondary/20 px-3 py-2 text-foreground focus:border-primary focus:outline-none"
+                                />
+                            </label>
+                            <p className="text-xs text-muted-foreground">
+                                x: {selectedEvidence.pixel.x.toFixed(1)}, y: {selectedEvidence.pixel.y.toFixed(1)}
+                            </p>
+                            <button
+                                onClick={handleDelete}
+                                type="button"
+                                className="w-full rounded-2xl bg-red-500/90 px-4 py-2 text-sm font-semibold text-white shadow-[0_15px_30px_rgba(239,68,68,0.35)] transition hover:bg-red-500"
+                            >
+                                Delete Marker
+                            </button>
+                        </>
+                    ) : (
+                        <div className="rounded-2xl border border-dashed border-border/40 bg-secondary/10 px-3 py-6 text-center text-muted-foreground">
+                            {rulerMode ? "Ruler mode active — exit to edit markers." : "Select or drag a marker to edit its details."}
                         </div>
-                        <div style={{ marginBottom: "10px" }}>
-                            <label>Category</label>
-                            <input
-                                value={selectedEvidence.category}
-                                onChange={(e) => updateField("category", e.target.value)}
-                                style={{ width: "100%" }}
-                            />
-                        </div>
-                        <div style={{ marginBottom: "10px" }}>
-                            <label>Notes</label>
-                            <textarea
-                                value={selectedEvidence.notes}
-                                onChange={(e) => updateField("notes", e.target.value)}
-                                rows={4}
-                                style={{ width: "100%" }}
-                            />
-                        </div>
-                        <p style={{ color: "#666" }}>
-                            x: {selectedEvidence.pixel.x.toFixed(1)}, y: {selectedEvidence.pixel.y.toFixed(1)}
-                        </p>
-                        <button
-                            onClick={handleDelete}
-                            style={{
-                                width: "100%",
-                                backgroundColor: "#f44336",
-                                color: "white",
-                                padding: "8px",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                            }}
-                        >
-                            Delete Marker
-                        </button>
-                    </>
-                ) : (
-                    <p style={{ color: "#999" }}>{rulerMode ? "Ruler mode active" : "Click a marker to edit or move"}</p>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

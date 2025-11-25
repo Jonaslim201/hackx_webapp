@@ -1,10 +1,5 @@
-import Link from 'next/link'
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return (
-    <main>
-      <p>Welcome — view cases stored in S3.</p>
-      <Link href="/cases">Open Cases</Link>
-    </main>
-  )
+  redirect('/cases');
 }

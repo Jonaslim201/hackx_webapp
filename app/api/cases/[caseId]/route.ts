@@ -1,20 +1,21 @@
 import { NextResponse } from 'next/server';
-import { listObjectsForCase, getObjectBuffer } from '../../../../lib/s3';
-import parsePGM from '../../../../lib/parsePGM';
-import parseYAML from '../../../../lib/parseYAML';
-import parseCSV from '../../../../lib/parseCSV';
-import { getContours, convertEvidenceToPixels, pgmToPNGBuffer } from '../../../../lib/mapUtils';
+import { listObjectsForCase, getObjectBuffer } from '@lib/s3';
+import parsePGM from '@lib/parsePGM';
+import parseYAML from '@lib/parseYAML';
+import parseCSV from '@lib/parseCSV';
+import { getContours, convertEvidenceToPixels, pgmToPNGBuffer } from '@lib/mapUtils';
+import { getCaseSummary } from '@lib/caseSummary';
 
 export async function GET(request: Request, context: { params: Promise<{ caseId: string }> }) {
   try {
     const { caseId } = await context.params;
-    const keys = await listObjectsForCase(caseId);
-    if (!keys.length) return NextResponse.json({ error: 'No files found for case' }, { status: 404 });
+    const objects = await listObjectsForCase(caseId);
+    if (!objects.length) return NextResponse.json({ error: 'No files found for case' }, { status: 404 });
 
     // Find files by extension
-    const pgmKey = keys.find(k => k.toLowerCase().endsWith('.pgm'));
-    const yamlKey = keys.find(k => k.toLowerCase().endsWith('.yaml') || k.toLowerCase().endsWith('.yml'));
-    const csvKey = keys.find(k => k.toLowerCase().endsWith('.csv'));
+    const pgmKey = objects.find(o => o.key.toLowerCase().endsWith('.pgm'))?.key;
+    const yamlKey = objects.find(o => o.key.toLowerCase().endsWith('.yaml') || o.key.toLowerCase().endsWith('.yml'))?.key;
+    const csvKey = objects.find(o => o.key.toLowerCase().endsWith('.csv'))?.key;
 
     if (!pgmKey || !yamlKey) return NextResponse.json({ error: 'PGM and YAML required' }, { status: 400 });
 
@@ -34,11 +35,14 @@ export async function GET(request: Request, context: { params: Promise<{ caseId:
     const evidencePixels = convertEvidenceToPixels(evidence, yaml.origin, yaml.resolution, pgm.height);
     const pngBuffer = await pgmToPNGBuffer(pgm.pixels, pgm.width, pgm.height);
 
+    const summary = await getCaseSummary(caseId, objects);
+
     return NextResponse.json({
       success: true,
       map: { width: pgm.width, height: pgm.height, contours },
       evidence: evidencePixels,
-      baseImage: `data:image/png;base64,${pngBuffer.toString('base64')}`
+      baseImage: `data:image/png;base64,${pngBuffer.toString('base64')}`,
+      summary
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });

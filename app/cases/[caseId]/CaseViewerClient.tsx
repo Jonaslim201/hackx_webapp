@@ -1,79 +1,294 @@
 "use client";
-import { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
-import type { MapData, Evidence } from '../../../types/types';
 
-const MapEditor = dynamic(() => import('../../../components/MapEditor'), { ssr: false });
+import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { ArrowLeft, Save } from 'lucide-react';
+import { toast } from 'sonner';
+import type { MapData, Evidence } from '@/types/types';
+import type { CaseSummary, CaseStatus } from '@/types/case';
+import StatusBadge from '@/components/StatusBadge';
+
+const MapEditor = dynamic(() => import('@/components/MapEditor'), { ssr: false });
 
 interface Props {
   caseId: string;
 }
 
+type CaseResponse = {
+  map: MapData;
+  evidence: Evidence[];
+  baseImage: string;
+  summary?: CaseSummary;
+  error?: string;
+};
+
+const STATUS_OPTIONS: Array<{ value: CaseStatus; label: string; active: string; idle: string }> = [
+  {
+    value: 'open',
+    label: 'Open',
+    active: 'border-emerald-400 bg-emerald-500/25 text-emerald-50 shadow-[0_8px_25px_rgba(16,185,129,0.25)]',
+    idle: 'text-emerald-200/70'
+  },
+  {
+    value: 'in-progress',
+    label: 'In Progress',
+    active: 'border-amber-400 bg-amber-400/20 text-amber-50 shadow-[0_8px_25px_rgba(245,158,11,0.25)]',
+    idle: 'text-amber-100/70'
+  },
+  {
+    value: 'closed',
+    label: 'Closed',
+    active: 'border-sky-400 bg-sky-400/20 text-sky-50 shadow-[0_8px_25px_rgba(14,165,233,0.25)]',
+    idle: 'text-sky-100/70'
+  },
+  {
+    value: 'archived',
+    label: 'Archived',
+    active: 'border-slate-400 bg-slate-400/20 text-slate-50 shadow-[0_8px_25px_rgba(148,163,184,0.3)]',
+    idle: 'text-slate-200/70'
+  }
+];
+
 export default function CaseViewerClient({ caseId }: Props) {
   const [map, setMap] = useState<MapData | null>(null);
   const [baseImage, setBaseImage] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [summary, setSummary] = useState<CaseSummary | null>(null);
+  const [details, setDetails] = useState<CaseSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     fetch(`/api/cases/${encodeURIComponent(caseId)}`)
-      .then(r => r.json())
-      .then(j => {
+      .then((response) => response.json())
+      .then((json: CaseResponse) => {
         if (cancelled) return;
-        if (j.error) setError(j.error);
-        else {
-          setMap(j.map);
-          setEvidence(j.evidence || []);
-          setBaseImage(j.baseImage);
+        if (json.error) {
+          setError(json.error);
+          return;
         }
+        setMap(json.map);
+        setBaseImage(json.baseImage);
+        setEvidence(json.evidence ?? []);
+        const fallbackSummary: CaseSummary = json.summary ?? {
+          id: caseId,
+          title: caseId,
+          description: 'Map assets synced from S3',
+          status: 'open',
+          createdBy: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          evidenceCount: json.evidence?.length ?? 0,
+          tags: [],
+          files: {}
+        };
+        setSummary(fallbackSummary);
+        setDetails(fallbackSummary);
       })
-      .catch(e => !cancelled && setError(String(e)))
+      .catch((err) => !cancelled && setError(String(err)))
       .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [caseId]);
 
-  if (loading) return <p>Loading case {caseId}…</p>;
-  if (error) return <p style={{ color: 'red' }}>{error}</p>;
-  if (!map || !baseImage) return <p>No data</p>;
+  const status: CaseStatus = details?.status ?? 'open';
+  const totalMarkers = evidence.length;
+
+  const formattedDates = useMemo(() => {
+    const created = details?.createdAt ? new Date(details.createdAt).toLocaleString() : '—';
+    const updated = details?.updatedAt ? new Date(details.updatedAt).toLocaleString() : '—';
+    return { created, updated };
+  }, [details]);
+
+  const updateDetails = (partial: Partial<CaseSummary>) => {
+    setDetails((prev) => (prev ? { ...prev, ...partial } : prev));
+  };
 
   const handleSave = async () => {
-    setSaving(true);
-    setSavedMsg(null);
     try {
+      setSaving(true);
       const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}/evidence`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ evidence })
       });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || 'Save failed');
-      if (Array.isArray(j.evidence)) {
-        setEvidence(j.evidence);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Save failed');
+      if (Array.isArray(json.evidence)) {
+        setEvidence(json.evidence);
       }
-      setSavedMsg('Saved successfully');
+      toast.success('Evidence markers saved back to S3');
     } catch (err: any) {
-      setSavedMsg(`Save failed: ${err.message || String(err)}`);
+      toast.error(err.message || 'Failed to save evidence');
     } finally {
       setSaving(false);
-      setTimeout(() => setSavedMsg(null), 4000);
     }
   };
 
+  if (loading) {
+    return <div className="p-10 text-muted-foreground">Loading case {caseId}…</div>;
+  }
+
+  if (error) {
+    return <div className="p-10 text-destructive">{error}</div>;
+  }
+
+  if (!map || !baseImage) {
+    return <div className="p-10 text-muted-foreground">No map data for this case.</div>;
+  }
+
   return (
-    <div>
-      <h2>Case: {caseId}</h2>
-      <div style={{ marginBottom: 12 }}>
-        <button onClick={handleSave} disabled={saving} style={{ marginRight: 8 }}>
-          {saving ? 'Saving…' : 'Save Markers to S3'}
-        </button>
-        {savedMsg && <span style={{ color: savedMsg.startsWith('Save failed') ? 'red' : 'green' }}>{savedMsg}</span>}
-      </div>
-      <MapEditor baseImage={baseImage} mapData={map} evidence={evidence} onEvidenceUpdate={setEvidence} />
+    <div className="min-h-screen bg-transparent text-foreground">
+      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-1 items-start gap-4">
+            <Link
+              href="/cases"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 text-muted-foreground transition hover:border-primary/60 hover:text-primary"
+              aria-label="Back to cases"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Case #{caseId}</p>
+              <h1 className="text-3xl font-semibold text-foreground">{details?.title ?? summary?.title ?? caseId}</h1>
+              <p className="text-sm text-muted-foreground">
+                {summary?.description ?? 'Map and evidence assets stored in S3'}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={status} />
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-400 to-blue-500 px-6 py-2 text-sm font-semibold text-slate-950 shadow-[0_10px_30px_rgba(14,165,233,0.35)] transition hover:shadow-[0_15px_35px_rgba(14,165,233,0.45)] disabled:opacity-60"
+            >
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving…' : 'Save All Changes'}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6 xl:flex-row">
+        <section className="flex-1">
+          <div className="h-full rounded-[32px] border border-border/40 bg-card/40 p-4 shadow-[0_25px_80px_rgba(0,0,0,0.35)] sm:p-6">
+            <MapEditor baseImage={baseImage} mapData={map} evidence={evidence} onEvidenceUpdate={setEvidence} />
+          </div>
+        </section>
+
+        <aside className="w-full xl:w-[360px]">
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-border/40 bg-card/50 p-5">
+              <h2 className="text-lg font-semibold">Case Details</h2>
+              <div className="mt-4 space-y-4 text-sm">
+                <label className="space-y-1">
+                  <span className="text-muted-foreground">Case Title</span>
+                  <input
+                    type="text"
+                    value={details?.title ?? ''}
+                    onChange={(e) => updateDetails({ title: e.target.value })}
+                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-muted-foreground">Description</span>
+                  <textarea
+                    value={details?.description ?? ''}
+                    onChange={(e) => updateDetails({ description: e.target.value })}
+                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                    rows={3}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-muted-foreground">Created By</span>
+                  <input
+                    type="text"
+                    value={details?.createdBy ?? ''}
+                    onChange={(e) => updateDetails({ createdBy: e.target.value })}
+                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-border/40 bg-card/50 p-5">
+              <h2 className="text-lg font-semibold">Evidence Summary</h2>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between rounded-2xl border border-border/30 bg-secondary/15 px-4 py-3">
+                  <span className="text-muted-foreground">Total Markers</span>
+                  <span className="text-lg font-semibold text-primary">{totalMarkers}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl border border-border/30 bg-secondary/15 px-4 py-3">
+                  <span className="text-muted-foreground">Current Status</span>
+                  <StatusBadge status={status} />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-border/40 bg-card/50 p-5 text-sm">
+              <h2 className="text-lg font-semibold">Case Settings</h2>
+              <div className="mt-4 space-y-5">
+                <div className="space-y-2">
+                  <span className="text-muted-foreground">Status</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {STATUS_OPTIONS.map((option) => {
+                      const isActive = status === option.value;
+                      return (
+                        <button
+                          type="button"
+                          key={option.value}
+                          onClick={() => updateDetails({ status: option.value })}
+                          className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
+                            isActive
+                              ? option.active
+                              : `border-border/40 bg-transparent ${option.idle}`
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <label className="space-y-2">
+                  <span className="text-muted-foreground">Tags (comma separated)</span>
+                  <input
+                    type="text"
+                    value={(details?.tags ?? []).join(', ')}
+                    onChange={(e) =>
+                      updateDetails({
+                        tags: e.target.value.split(',').map((tag) => tag.trim()).filter(Boolean)
+                      })
+                    }
+                    className="w-full rounded-2xl border border-border/40 bg-secondary/20 px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                  />
+                </label>
+
+                <div className="grid gap-3 rounded-2xl border border-border/30 bg-secondary/10 px-4 py-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Created</p>
+                    <p className="text-sm">{formattedDates.created}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Last Updated</p>
+                    <p className="text-sm">{formattedDates.updated}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
     </div>
   );
 }

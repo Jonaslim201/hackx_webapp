@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { putObjectBuffer, listObjectsForCase, getObjectBuffer } from '@lib/s3';
+import { putObjectBuffer, listObjectsForCase, getObjectBuffer, buildCaseObjectKey } from '@lib/s3';
 import parsePGM from '@lib/parsePGM';
 import parseYAML from '@lib/parseYAML';
 import { pixelToWorld, convertEvidenceToPixels } from '@lib/mapUtils';
@@ -56,20 +56,21 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     const body = (await request.json()) as Body;
     if (!body || !Array.isArray(body.evidence)) return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
 
-    const keys = await listObjectsForCase(caseId);
+    const objects = await listObjectsForCase(caseId);
     const findKey = (ext: string, predicate?: (k: string) => boolean) =>
-      keys.find(k => k.toLowerCase().endsWith(ext) && (!predicate || predicate(k)));
+      objects.find(o => o.key.toLowerCase().endsWith(ext) && (!predicate || predicate(o.key)))?.key;
 
     const pgmKey = findKey('.pgm');
-    const yamlKey = keys.find(k => k.toLowerCase().endsWith('.yaml') || k.toLowerCase().endsWith('.yml'));
+    const yamlKey = objects.find(o => o.key.toLowerCase().endsWith('.yaml') || o.key.toLowerCase().endsWith('.yml'))?.key;
 
     if (!pgmKey || !yamlKey) {
       return NextResponse.json({ error: 'Missing PGM or YAML for case' }, { status: 400 });
     }
 
-    const evidenceKeyFromBucket = keys.find(k => k.toLowerCase().includes('evidence') && k.toLowerCase().endsWith('.csv'));
-    const filename = body.filename || (evidenceKeyFromBucket ? evidenceKeyFromBucket.split('/').pop() : `${caseId}_evidence.csv`);
-    const targetKey = `${(process.env.S3_PREFIX || '')}${caseId}/${filename}`;
+    const evidenceKeyFromBucket = objects.find(o => o.key.toLowerCase().includes('evidence') && o.key.toLowerCase().endsWith('.csv'))?.key;
+    const derivedName = evidenceKeyFromBucket?.split('/').pop();
+    const filename = (body.filename && body.filename.trim()) || derivedName || `${caseId}_evidence.csv`;
+    const targetKey = buildCaseObjectKey(caseId, filename);
 
     const [pgmBuf, yamlBuf] = await Promise.all([
       getObjectBuffer(pgmKey),

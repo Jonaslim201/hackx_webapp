@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { listCaseIds } from '../../../lib/s3';
+import { getCaseSummaries } from '@lib/caseSummary';
 
 export async function GET() {
   try {
-    const ids = await listCaseIds();
-    return NextResponse.json({ cases: ids });
+    const cases = await getCaseSummaries();
+    return NextResponse.json({ cases });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });
   }
