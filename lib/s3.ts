@@ -1,6 +1,6 @@
 import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const REGION = process.env.AWS_REGION || "us-east-1";
+const REGION = process.env.BUCKET_REGION || "ap-southeast-2";
 const BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET;
 const PREFIX = process.env.S3_PREFIX || ""; // optional prefix where cases live
 const NORMALIZED_PREFIX = PREFIX
