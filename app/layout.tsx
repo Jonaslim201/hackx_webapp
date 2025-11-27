@@ -4,8 +4,8 @@ import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
 
 export const metadata = {
-  title: 'HackX Map Viewer',
-  description: 'Cases viewer backed by S3',
+  title: 'Forenstick',
+  description: 'Cases viewer for Forenstick',
 };
 
 export const viewport = {
