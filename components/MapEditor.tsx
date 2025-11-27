@@ -32,6 +32,7 @@ export default function MapEditor({
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [scale, setScale] = useState(1);
@@ -335,6 +336,9 @@ export default function MapEditor({
             label: "New Marker",
             category: "uncategorized",
             notes: "",
+            imageKey: null,
+            imageUrl: null,
+            imageData: null,
         };
         onEvidenceUpdate([...evidence, newEvidence]);
         setSelectedId(newEvidence.id);
@@ -347,10 +351,35 @@ export default function MapEditor({
         }
     };
 
-    const updateField = (field: keyof Evidence, value: string) => {
+    const updateSelectedEvidence = (patch: Partial<Evidence>) => {
         if (!selectedId) return;
-        const updated = evidence.map((ev) => (ev.id === selectedId ? { ...ev, [field]: value } : ev));
+        const updated = evidence.map((ev) => (ev.id === selectedId ? { ...ev, ...patch } : ev));
         onEvidenceUpdate(updated);
+    };
+
+    const updateField = (field: keyof Evidence, value: string) => {
+        updateSelectedEvidence({ [field]: value } as Partial<Evidence>);
+    };
+
+    const handleImageButtonClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+            const dataUrl = await readFileAsDataUrl(file);
+            updateSelectedEvidence({ imageData: dataUrl, imageUrl: dataUrl, imageKey: null });
+        } catch (err) {
+            console.error('Failed to read marker image', err);
+        } finally {
+            event.target.value = '';
+        }
+    };
+
+    const handleImageRemove = () => {
+        updateSelectedEvidence({ imageKey: null, imageUrl: null, imageData: null });
     };
 
     const handleExport = () => {
@@ -472,7 +501,7 @@ export default function MapEditor({
                             <label className="block space-y-1 text-muted-foreground">
                                 <span className="text-xs sm:text-sm">Label</span>
                                 <input
-                                    value={selectedEvidence.label}
+                                    value={selectedEvidence.label ?? ''}
                                     onChange={(e) => updateField("label", e.target.value)}
                                     className="w-full rounded-lg sm:rounded-xl border border-border/40 bg-secondary/20 px-3 py-2 text-sm sm:text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 />
@@ -480,7 +509,7 @@ export default function MapEditor({
                             <label className="block space-y-1 text-muted-foreground">
                                 <span className="text-xs sm:text-sm">Category</span>
                                 <input
-                                    value={selectedEvidence.category}
+                                    value={selectedEvidence.category ?? ''}
                                     onChange={(e) => updateField("category", e.target.value)}
                                     className="w-full rounded-lg sm:rounded-xl border border-border/40 bg-secondary/20 px-3 py-2 text-sm sm:text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 />
@@ -488,11 +517,54 @@ export default function MapEditor({
                             <label className="block space-y-1 text-muted-foreground">
                                 <span className="text-xs sm:text-sm">Notes</span>
                                 <textarea
-                                    value={selectedEvidence.notes}
+                                    value={selectedEvidence.notes ?? ''}
                                     onChange={(e) => updateField("notes", e.target.value)}
                                     rows={4}
                                     className="w-full rounded-lg sm:rounded-xl border border-border/40 bg-secondary/20 px-3 py-2 text-sm sm:text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
                                 />
+                            </label>
+                            <label className="block space-y-1 text-muted-foreground">
+                                <span className="text-xs sm:text-sm">Reference Image</span>
+                                <div className="w-full rounded-lg sm:rounded-xl border border-border/40 bg-secondary/10 p-3 space-y-3">
+                                    {selectedEvidence.imageUrl ? (
+                                        <div className="rounded-lg border border-border/40 bg-black/40 p-2">
+                                            <img
+                                                src={selectedEvidence.imageUrl}
+                                                alt={`Marker ${selectedEvidence.id} reference`}
+                                                className="max-h-40 w-full object-contain"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-lg border border-dashed border-border/40 bg-black/20 p-4 text-center text-xs text-muted-foreground">
+                                            No image selected
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleImageButtonClick}
+                                            className="inline-flex items-center rounded-full bg-sky-500/90 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-[0_8px_20px_rgba(14,165,233,0.35)]"
+                                        >
+                                            {selectedEvidence.imageUrl ? "Replace Image" : "Upload Image"}
+                                        </button>
+                                        {selectedEvidence.imageUrl && (
+                                            <button
+                                                type="button"
+                                                onClick={handleImageRemove}
+                                                className="inline-flex items-center rounded-full border border-border/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleImageChange}
+                                    />
+                                </div>
                             </label>
                             <p className="text-xs text-muted-foreground">
                                 x: {selectedEvidence.pixel.x.toFixed(1)}, y: {selectedEvidence.pixel.y.toFixed(1)}
@@ -514,4 +586,13 @@ export default function MapEditor({
             </div>
         </div>
     );
+}
+
+function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
 }

@@ -5,6 +5,7 @@ import parseYAML from '@lib/parseYAML';
 import parseCSV from '@lib/parseCSV';
 import { getContours, convertEvidenceToPixels, pgmToPNGBuffer } from '@lib/mapUtils';
 import { getCaseSummary } from '@lib/caseSummary';
+import { attachMarkerImageUrls } from '@lib/markerMedia';
 
 export async function GET(request: Request, context: { params: Promise<{ caseId: string }> }) {
   try {
@@ -32,7 +33,9 @@ export async function GET(request: Request, context: { params: Promise<{ caseId:
     let contours: any[] = [];
     try { contours = getContours(pgm.pixels, pgm.width, pgm.height); } catch (_) { contours = []; }
 
-    const evidencePixels = convertEvidenceToPixels(evidence, yaml.origin, yaml.resolution, pgm.height);
+    const evidencePixels = await attachMarkerImageUrls(
+      convertEvidenceToPixels(evidence, yaml.origin, yaml.resolution, pgm.height)
+    );
     const pngBuffer = await pgmToPNGBuffer(pgm.pixels, pgm.width, pgm.height);
 
     const summary = await getCaseSummary(caseId, objects);

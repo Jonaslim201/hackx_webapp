@@ -15,4 +15,7 @@ export type Evidence = {
   label?: string;
   category?: string;
   notes?: string;
+  imageKey?: string | null;
+  imageUrl?: string | null;
+  imageData?: string | null; // data URL for pending uploads only
 }

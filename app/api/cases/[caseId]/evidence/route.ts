@@ -5,6 +5,7 @@ import parseYAML from '@lib/parseYAML';
 import { pixelToWorld, convertEvidenceToPixels } from '@lib/mapUtils';
 import { CASE_METADATA_FILENAME, CaseMetadataPatch, ensureMetadataFile, upsertCaseMetadata } from '@lib/caseMetadata';
 import type { CaseMetadata } from '@/types/case';
+import { saveMarkerImageFromDataUrl, attachMarkerImageUrls } from '@lib/markerMedia';
 
 type EvidencePayload = {
   id?: string;
@@ -12,11 +13,17 @@ type EvidencePayload = {
   y?: string | number;
   time?: string;
   pixel?: { x: number; y: number };
+  label?: string;
+  category?: string;
+  notes?: string;
+  imageKey?: string | null;
+  imageData?: string | null;
 };
 
 type Body = { evidence: any[]; filename?: string; metadata?: unknown };
 
-const CSV_HEADERS = ['id', 'x', 'y', 'time'] as const;
+const CSV_HEADERS = ['id', 'x', 'y', 'time', 'label', 'category', 'notes', 'imageKey'] as const;
+type CsvRow = Record<(typeof CSV_HEADERS)[number], string>;
 
 function escapeCsv(value: string) {
   if (value === undefined || value === null) return '';
@@ -84,7 +91,7 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     const pgm = parsePGM(pgmBuf);
     const yaml = parseYAML(yamlBuf.toString('utf-8'));
 
-    const csvRows = buildCsvRows(body.evidence as EvidencePayload[], yaml.origin, yaml.resolution, pgm.height);
+    const { rows: csvRows } = await buildCsvRows(caseId, body.evidence as EvidencePayload[], yaml.origin, yaml.resolution, pgm.height);
     const buf = rowsToCSV(csvRows);
     await putObjectBuffer(targetKey, buf, 'text/csv');
 
@@ -92,9 +99,15 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
       id: row.id,
       x: row.x,
       y: row.y,
-      time: row.time
+      time: row.time,
+      label: row.label,
+      category: row.category,
+      notes: row.notes,
+      imageKey: row.imageKey || undefined,
     }));
-    const evidenceWithPixels = convertEvidenceToPixels(evidenceObjects, yaml.origin, yaml.resolution, pgm.height);
+    const evidenceWithPixels = await attachMarkerImageUrls(
+      convertEvidenceToPixels(evidenceObjects, yaml.origin, yaml.resolution, pgm.height)
+    );
 
     let metadataResult: CaseMetadata | null = null;
     if (metadataPatch) {
@@ -123,7 +136,8 @@ function extractMetadataPatch(raw: unknown): CaseMetadataPatch | null {
   return Object.keys(patch).length ? patch : null;
 }
 
-function buildCsvRows(
+async function buildCsvRows(
+  caseId: string,
   evidence: EvidencePayload[],
   origin: [number, number, number],
   resolution: number,
@@ -139,7 +153,9 @@ function buildCsvRows(
     }
   }
 
-  return evidence.map((item) => {
+  const rows: CsvRow[] = [];
+
+  for (const [index, item] of evidence.entries()) {
     let numericId = Number(item.id);
     if (Number.isNaN(numericId) || usedIds.has(numericId)) {
       numericId = ++maxNumericId;
@@ -168,12 +184,45 @@ function buildCsvRows(
     }
 
     const time = normalizeTime(item.time);
+    const label = sanitizeText(item.label);
+    const category = sanitizeText(item.category);
+    const notes = sanitizeMultiline(item.notes);
+    let imageKey = sanitizeImageKey(item.imageKey);
 
-    return {
+    if (item.imageData) {
+      const uploadedKey = await saveMarkerImageFromDataUrl(caseId, String(numericId), item.imageData);
+      if (uploadedKey) {
+        imageKey = uploadedKey;
+      }
+    }
+
+    rows[index] = {
       id: String(numericId),
       x: formatNumber(worldX),
       y: formatNumber(worldY),
       time,
+      label,
+      category,
+      notes,
+      imageKey,
     };
-  });
+  }
+
+  return { rows };
 }
+
+function sanitizeText(value?: string | null) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function sanitizeMultiline(value?: string | null) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/\r\n/g, '\n');
+}
+
+function sanitizeImageKey(value?: string | null) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+

@@ -82,7 +82,7 @@ export default function CaseViewerClient({ caseId }: Props) {
         }
         setMap(json.map);
         setBaseImage(json.baseImage);
-        setEvidence(json.evidence ?? []);
+        setEvidence((json.evidence ?? []).map((item) => ({ ...item, imageData: null })));
         const fallbackSummary: CaseSummary = json.summary ?? {
           id: caseId,
           title: caseId,
@@ -138,7 +138,7 @@ export default function CaseViewerClient({ caseId }: Props) {
       const json: SaveResponse = await res.json();
       if (!res.ok) throw new Error(json.error || 'Save failed');
       if (Array.isArray(json.evidence)) {
-        setEvidence(json.evidence);
+        setEvidence(json.evidence.map((item) => ({ ...item, imageData: null })));
       }
       if (json.metadata) {
         setDetails((prev) => (prev ? { ...prev, ...json.metadata } : prev));
