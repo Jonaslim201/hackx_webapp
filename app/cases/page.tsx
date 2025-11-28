@@ -7,11 +7,14 @@ import { Clock, MapPin, Search, User, PlusCircle, BadgeInfo } from 'lucide-react
 import type { CaseSummary } from '@/types/case';
 import StatusBadge from '@/components/StatusBadge';
 
+
 export default function CasesPage() {
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const link = process.env.NEXT_PUBLIC_FOXGLOVE_LINK;
+
 
   useEffect(() => {
     let cancelled = false;
@@ -56,14 +59,12 @@ export default function CasesPage() {
               <h1 className="text-2xl sm:text-3xl font-bold text-foreground truncate">Case Management</h1>
               <p className="text-sm sm:text-base text-muted-foreground">View and manage all active cases</p>
             </div>
-            {/* <button
-              type="button"
+            <Link
+              href={link}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:bg-primary/90 mt-4 sm:mt-0 sm:ml-4 flex-shrink-0"
             >
-              <PlusCircle className="h-4 w-4" />
-              <span className="hidden sm:inline">New Case</span>
-              <span className="sm:hidden">New</span>
-            </button> */}
+              Visualize Cases
+            </Link>
           </div>
 
           <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-center">
