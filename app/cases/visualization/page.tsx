@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from "react";
 
-export function FoxgloveDebug() {
+export default function FoxgloveDebug() {
   const [status, setStatus] = useState("idle");
   const [log, setLog] = useState<string[]>([]);
 
