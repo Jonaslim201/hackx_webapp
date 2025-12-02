@@ -105,7 +105,7 @@ async function buildSummary(group: CaseFileGroup): Promise<CaseSummary> {
     await setCreatedAtIfEarlier(group.id, derivedCreatedAt);
   }
   const description = normalizeField(metadata?.description);
-  const status = metadata?.status ?? deriveStatus(evidenceCount, updatedAt, hash);
+  const status = metadata?.status ?? 'open';
   const createdBy = normalizeField(metadata?.createdBy);
   const tags = Array.isArray(metadata?.tags) && metadata.tags.length ? metadata.tags : [];
   return {
@@ -188,14 +188,6 @@ function mergeDateAndTime(dateIso: string, time: string): string | null {
   const seconds = parsed.seconds % 60;
   base.setUTCHours(hours, minutes, seconds, 0);
   return base.toISOString();
-}
-
-function deriveStatus(evidenceCount: number, updatedAt: string, seed: number): CaseStatus {
-  const ageDays = Math.max(0, (Date.now() - new Date(updatedAt).getTime()) / 86_400_000);
-  if (evidenceCount === 0) return 'open';
-  if (ageDays < 2) return 'in-progress';
-  if (evidenceCount > 8) return 'closed';
-  return ['in-progress', 'archived'][seed % 2] as CaseStatus;
 }
 
 function basename(key: string) {
